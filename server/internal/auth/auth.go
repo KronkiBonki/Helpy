@@ -11,7 +11,7 @@ import (
 )
 
 func CreateAuthTable(conn *pgx.Conn) error {
-	_, err := conn.Exec(context.Background(), "create table if not exists auth (id uuid default gen_random_uuid())")
+	_, err := conn.Exec(context.Background(), "create table if not exists auth (id uuid primary key default gen_random_uuid())")
 	return err
 }
 
@@ -39,4 +39,15 @@ func GetAuth(c *gin.Context) {
 	}
 
 	c.SetCookie("auth", id, 0, "/", "", false, true)
+}
+
+func HasCookie(c *gin.Context) {
+	_, err := c.Cookie("auth")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusOK, gin.H{"cookie": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"cookie": true})
 }
