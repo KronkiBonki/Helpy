@@ -25,7 +25,7 @@ const Index = () => {
       try {
         const response = await fetch("http://localhost:42069/cookie", {
           method: "GET",
-          credentials: "include", // Include cookies in the request
+          credentials: "include",
         });
         
         const data = await response.json();
@@ -33,7 +33,6 @@ const Index = () => {
         if (data.cookie) {
           setIsAuthenticated(true);
         } else {
-          // No valid cookie, request authentication
           await fetch("http://localhost:42069/auth", {
             method: "GET",
             credentials: "include",
@@ -42,7 +41,6 @@ const Index = () => {
         }
       } catch (error) {
         console.error("Error checking authentication:", error);
-        // Try to authenticate anyway
         try {
           await fetch("http://localhost:42069/auth", {
             method: "GET",
@@ -60,58 +58,97 @@ const Index = () => {
     checkAuth();
   }, []);
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+const startRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Try different MIME types in order of preference
+    let mimeType = '';
+    const supportedTypes = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+      'audio/mpeg',
+      'audio/wav'
+    ];
+    
+    for (const type of supportedTypes) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        mimeType = type;
+        console.log('Using MIME type:', mimeType);
+        break;
+      }
+    }
+    
+    const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    mediaRecorderRef.current = mediaRecorder;
+    audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        console.log('Data chunk received:', event.data.size, 'bytes');
+        audioChunksRef.current.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      console.log('Total chunks:', audioChunksRef.current.length);
+      
+      // Determine file extension based on MIME type
+      let extension = 'webm';
+      if (mimeType.includes('mp4')) extension = 'm4a';
+      else if (mimeType.includes('mpeg')) extension = 'mp3';
+      else if (mimeType.includes('ogg')) extension = 'ogg';
+      else if (mimeType.includes('wav')) extension = 'wav';
+      
+      console.log('Audio format:', extension);
+      
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
+      
+      // Debug: Log the blob size
+      console.log('Blob size:', audioBlob.size, 'bytes');
+      
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = async () => {
+        const base64Audio = reader.result?.toString().split(",")[1];
+        
+        if (base64Audio) {
+          console.log('Base64 length:', base64Audio.length);
+          
+          try {
+            const response = await fetch("http://localhost:42069/voice", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              credentials: "include",
+              body: JSON.stringify({ 
+                audio: base64Audio,
+                format: extension
+              }),
+            });
+            
+            const data = await response.json();
+            setResponse(data.response);
+          } catch (error) {
+            console.error("Error sending audio:", error);
+            setResponse("Error: Could not get response from server");
+          }
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        // Convert to base64
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = async () => {
-          const base64Audio = reader.result?.toString().split(",")[1];
-          console.log(base64Audio)
-          
-          if (base64Audio) {
-            try {
-              const response = await fetch("http://localhost:42069/voice", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                credentials: "include", // Include cookies
-                body: JSON.stringify({ audio: base64Audio }),
-              });
-              
-              const data = await response.json();
-              setResponse(data.response);
-            } catch (error) {
-              console.error("Error sending audio:", error);
-              setResponse("Error: Could not get response from server");
-            }
-          }
-        };
+      stream.getTracks().forEach((track) => track.stop());
+    };
 
-        // Stop all tracks
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error("Error accessing microphone:", error);
-    }
-  };
+    // Start with timeslice to ensure data is captured periodically
+    mediaRecorder.start(100); // Request data every 100ms
+    setIsRecording(true);
+  } catch (error) {
+    console.error("Error accessing microphone:", error);
+  }
+};
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
@@ -149,7 +186,6 @@ const Index = () => {
     return () => document.removeEventListener("keydown", handleEscape);
   }, [response]);
 
-  // Show loading state while checking authentication
   if (isCheckingAuth) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background to-secondary/30 flex items-center justify-center">
@@ -163,7 +199,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary/30 flex flex-col">
-      {/* Header */}
       <header className="w-full px-6 py-4 flex items-center justify-between bg-[hsl(var(--header-bg))]">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -181,7 +216,6 @@ const Index = () => {
         <div className="w-10"></div>
       </header>
 
-      {/* Main Content - Centered Mic Button */}
       <main 
         className="flex-1 flex items-center justify-center px-6 pb-20 relative"
         onClick={response ? handleBackgroundClick : undefined}
@@ -204,14 +238,12 @@ const Index = () => {
           )}
         </Button>
 
-        {/* Response Display */}
         {response && (
           <div className="absolute inset-0 bg-black/50 flex items-end justify-center p-6 animate-in fade-in duration-300">
             <div
               ref={responseRef}
               className="bg-card rounded-t-3xl shadow-2xl w-full max-w-2xl max-h-[70vh] flex flex-col animate-in slide-in-from-bottom duration-300"
             >
-              {/* Response Header */}
               <div className="flex items-center justify-between p-6 border-b">
                 <h2 className="text-xl font-semibold">Response</h2>
                 <Button
@@ -224,7 +256,6 @@ const Index = () => {
                 </Button>
               </div>
 
-              {/* Response Content */}
               <div className="flex-1 overflow-y-auto p-6">
                 <p className="text-lg leading-relaxed whitespace-pre-wrap">{response}</p>
               </div>
