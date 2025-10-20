@@ -5,6 +5,7 @@ go 1.25.2
 require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/jackc/pgx/v5 v5.7.6
+	github.com/sashabaranov/go-openai v1.41.2
 )
 
 require (

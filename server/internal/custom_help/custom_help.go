@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// O4 Mini
-
 type Message struct {
 	ID      int    `json:"id"`
 	Message string `json:"message"`
@@ -21,6 +19,25 @@ type Message struct {
 func createCustomHelpTable(conn *pgx.Conn) error {
 	_, err := conn.Exec(context.Background(), "create table if not exists custom_help(id serial primary key, user_id uuid references auth(id), message text)")
 	return err
+}
+
+func GetHelpMessages(conn *pgx.Conn, id string) ([]*Message, error) {
+	rows, err := conn.Query(context.Background(), "select id, message from custom_help where user_id = $1", id)
+	if err != nil {
+		return nil, err
+	}
+
+	messages, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*Message, error) {
+		msg := Message{}
+		err := rows.Scan(&msg.ID, &msg.Message)
+		if err != nil {
+			return nil, err
+		}
+
+		return &msg, nil
+	})
+
+	return messages, nil
 }
 
 func GetCustomHelpMessages(c *gin.Context) {
@@ -40,25 +57,10 @@ func GetCustomHelpMessages(c *gin.Context) {
 		return
 	}
 
-	rows, err := conn.Query(context.Background(), "select id, message from custom_help where user_id = $1", id)
+	messages, err := GetHelpMessages(conn, id)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the messages from the database"})
-		return
-	}
-
-	messages, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*Message, error) {
-		msg := Message{}
-		err := rows.Scan(&msg.ID, &msg.Message)
-		if err != nil {
-			return nil, err
-		}
-
-		return &msg, nil
-	})
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to collect the messages"})
 		return
 	}
 
