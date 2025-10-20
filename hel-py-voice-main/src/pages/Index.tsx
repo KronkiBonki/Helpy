@@ -16,10 +16,9 @@ const Index = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const chunksRef = useRef<Blob[]>([]);
   const responseRef = useRef<HTMLDivElement>(null);
 
-  // Check authentication on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -58,100 +57,100 @@ const Index = () => {
     checkAuth();
   }, []);
 
-const startRecording = async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    // Try different MIME types in order of preference
-    let mimeType = '';
-    const supportedTypes = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/ogg;codecs=opus',
-      'audio/mp4',
-      'audio/mpeg',
-      'audio/wav'
-    ];
-    
-    for (const type of supportedTypes) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        mimeType = type;
-        console.log('Using MIME type:', mimeType);
-        break;
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+        }
+      });
+      
+      // Try to find a supported mime type
+      let mimeType = '';
+      const types = [
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg',
+        'audio/wav'
+      ];
+      
+      for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          console.log('Using mime type:', type);
+          break;
+        }
       }
-    }
-    
-    const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    mediaRecorderRef.current = mediaRecorder;
-    audioChunksRef.current = [];
+      
+      const options = mimeType ? { mimeType } : {};
+      const mediaRecorder = new MediaRecorder(stream, options);
+      
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        console.log('Data chunk received:', event.data.size, 'bytes');
-        audioChunksRef.current.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = async () => {
-      console.log('Total chunks:', audioChunksRef.current.length);
-      
-      // Determine file extension based on MIME type
-      let extension = 'webm';
-      if (mimeType.includes('mp4')) extension = 'm4a';
-      else if (mimeType.includes('mpeg')) extension = 'mp3';
-      else if (mimeType.includes('ogg')) extension = 'ogg';
-      else if (mimeType.includes('wav')) extension = 'wav';
-      
-      console.log('Audio format:', extension);
-      
-      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
-      
-      // Debug: Log the blob size
-      console.log('Blob size:', audioBlob.size, 'bytes');
-      
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = async () => {
-        const base64Audio = reader.result?.toString().split(",")[1];
-        
-        if (base64Audio) {
-          console.log('Base64 length:', base64Audio.length);
-          
-          try {
-            const response = await fetch("http://localhost:42069/voice", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              credentials: "include",
-              body: JSON.stringify({ 
-                audio: base64Audio,
-                format: extension
-              }),
-            });
-            
-            const data = await response.json();
-            setResponse(data.response);
-          } catch (error) {
-            console.error("Error sending audio:", error);
-            setResponse("Error: Could not get response from server");
-          }
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          console.log('Chunk received:', e.data.size);
         }
       };
 
-      stream.getTracks().forEach((track) => track.stop());
-    };
+      mediaRecorder.onstop = async () => {
+        console.log('Total chunks:', chunksRef.current.length);
+        
+        const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
+        console.log('Final blob size:', blob.size);
+        
+        if (blob.size === 0) {
+          setResponse("Error: No audio recorded");
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
 
-    // Start with timeslice to ensure data is captured periodically
-    mediaRecorder.start(100); // Request data every 100ms
-    setIsRecording(true);
-  } catch (error) {
-    console.error("Error accessing microphone:", error);
-  }
-};
+        // Convert blob to base64
+        const arrayBuffer = await blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        
+        console.log('Base64 length:', base64.length);
+        console.log('First 50 chars:', base64.substring(0, 50));
+
+        try {
+          const response = await fetch("http://localhost:42069/voice", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({ audio: base64 }),
+          });
+          
+          const data = await response.json();
+          setResponse(data.response);
+        } catch (error) {
+          console.error("Error sending audio:", error);
+          setResponse("Error: Could not get response from server");
+        }
+
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      console.log('Recording started');
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+    }
+  };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      console.log('Stopping recording...');
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
