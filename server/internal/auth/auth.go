@@ -40,3 +40,14 @@ func GetAuth(c *gin.Context) {
 
 	c.SetCookie("auth", id, 0, "/", "", false, true)
 }
+
+func HasCookie(c *gin.Context) {
+	_, err := c.Cookie("auth")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusOK, gin.H{"cookie": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"cookie": true})
+}
