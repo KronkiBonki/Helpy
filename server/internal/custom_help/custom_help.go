@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -76,20 +77,27 @@ func CreateCustomHelpMessage(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "insert into custom_help (user_id, message) values ($1, $2) returning id", id, message)
+	msg := Message{Message: message}
+	err = conn.QueryRow(context.Background(), "insert into custom_help (user_id, message) values ($1, $2) returning id", id, message).Scan(&msg.ID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to insert the information into the database"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": message})
+	c.JSON(http.StatusOK, gin.H{"message": msg})
 }
 
 func UpdateCustomHelpMessage(c *gin.Context) {
 	userID := c.GetString("cookie")
-	messageID := c.GetInt("id")
-	message := c.Param("message")
+	messageIDStr := c.Param("messageID")
+	messageID, err := strconv.Atoi(messageIDStr)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to parse the id of the message"})
+		return
+	}
+	message := c.GetString("message")
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -100,10 +108,10 @@ func UpdateCustomHelpMessage(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	msg := Message{ID: messageID}
-	err = conn.QueryRow(context.Background(), "update custom_help set message = $1, where id = $2 and user_id = $3 returning message", message, userID, messageID).Scan(&msg.Message)
+	err = conn.QueryRow(context.Background(), "update custom_help set message = $1 where id = $2 and user_id = $3 returning message", message, messageID, userID).Scan(&msg.Message)
 	if err != nil {
 		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unabel to update the information in the database"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to update the information in the database"})
 		return
 	}
 
@@ -122,7 +130,7 @@ func DeleteCustomHelpMessage(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "delete from custom_help where user_id = $1, id = $2", userID, messageID)
+	_, err = conn.Exec(context.Background(), "delete from custom_help where user_id = $1 and id = $2", userID, messageID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to remove the information from the database"})

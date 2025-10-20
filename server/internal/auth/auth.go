@@ -11,7 +11,7 @@ import (
 )
 
 func CreateAuthTable(conn *pgx.Conn) error {
-	_, err := conn.Exec(context.Background(), "create table if not exists auth (id uuid default gen_random_uuid())")
+	_, err := conn.Exec(context.Background(), "create table if not exists auth (id uuid primary key default gen_random_uuid())")
 	return err
 }
 

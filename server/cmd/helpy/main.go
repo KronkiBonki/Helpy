@@ -17,7 +17,7 @@ func main() {
 	customHelp.Use(middleware.AuthMiddleware)
 	customHelp.GET("", customhelp.GetCustomHelpMessages)
 	customHelp.POST("", middleware.JSONParserMiddleware, customhelp.CreateCustomHelpMessage)
-	customHelp.PUT("/:messageID", customhelp.UpdateCustomHelpMessage)
+	customHelp.PUT("/:messageID", middleware.JSONParserMiddleware, customhelp.UpdateCustomHelpMessage)
 	customHelp.DELETE("/:messageID", customhelp.DeleteCustomHelpMessage)
 
 	r.Run("localhost:42069")
