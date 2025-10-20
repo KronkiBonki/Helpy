@@ -21,6 +21,25 @@ func createCustomHelpTable(conn *pgx.Conn) error {
 	return err
 }
 
+func GetHelpMessages(conn *pgx.Conn, id string) ([]*Message, error) {
+	rows, err := conn.Query(context.Background(), "select id, message from custom_help where user_id = $1", id)
+	if err != nil {
+		return nil, err
+	}
+
+	messages, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*Message, error) {
+		msg := Message{}
+		err := rows.Scan(&msg.ID, &msg.Message)
+		if err != nil {
+			return nil, err
+		}
+
+		return &msg, nil
+	})
+
+	return messages, nil
+}
+
 func GetCustomHelpMessages(c *gin.Context) {
 	id := c.GetString("cookie")
 
@@ -38,25 +57,10 @@ func GetCustomHelpMessages(c *gin.Context) {
 		return
 	}
 
-	rows, err := conn.Query(context.Background(), "select id, message from custom_help where user_id = $1", id)
+	messages, err := GetHelpMessages(conn, id)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the messages from the database"})
-		return
-	}
-
-	messages, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*Message, error) {
-		msg := Message{}
-		err := rows.Scan(&msg.ID, &msg.Message)
-		if err != nil {
-			return nil, err
-		}
-
-		return &msg, nil
-	})
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to collect the messages"})
 		return
 	}
 
