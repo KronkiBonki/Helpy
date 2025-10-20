@@ -1,15 +1,27 @@
 package main
 
 import (
+	"time"
+
 	"github.com/KronkiBonki/Helpy/internal/auth"
 	customhelp "github.com/KronkiBonki/Helpy/internal/custom_help"
 	"github.com/KronkiBonki/Helpy/internal/middleware"
 	"github.com/KronkiBonki/Helpy/internal/voice"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	r := gin.Default()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	r.GET("/auth", auth.GetAuth)
 	r.GET("/cookie", auth.HasCookie)
