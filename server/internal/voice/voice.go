@@ -31,7 +31,7 @@ func GetVoiceResponse(c *gin.Context) {
 		return
 	}
 
-	file, err := os.OpenFile("audio.m4a", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
+	file, err := os.OpenFile("audio.webm", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to create an audio file"})
@@ -48,7 +48,7 @@ func GetVoiceResponse(c *gin.Context) {
 
 	file.Close()
 
-	file, err = os.Open("audio.m4a")
+	file, err = os.Open("audio.webm")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to opne the file"})
@@ -62,7 +62,7 @@ func GetVoiceResponse(c *gin.Context) {
 		context.Background(),
 		openai.AudioRequest{
 			Model:    "gpt-4o-mini-transcribe",
-			FilePath: "audio.m4a",
+			FilePath: "audio.webm",
 		},
 	)
 	if err != nil {
