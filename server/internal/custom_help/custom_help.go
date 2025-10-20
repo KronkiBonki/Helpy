@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// O4 Mini
-
 type Message struct {
 	ID      int    `json:"id"`
 	Message string `json:"message"`
