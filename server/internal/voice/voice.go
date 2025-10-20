@@ -2,6 +2,7 @@ package voice
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,7 +16,6 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
-// O4 Mini
 var mu = sync.Mutex{}
 
 func GetVoiceResponse(c *gin.Context) {
@@ -23,34 +23,46 @@ func GetVoiceResponse(c *gin.Context) {
 	defer mu.Unlock()
 	id := c.GetString("cookie")
 
-	audioI8 := c.GetInt8Slice("audio")
-	var audio []byte
-	for _, tone := range audioI8 {
-		audio = append(audio, byte(tone))
+	audioStr := c.GetString("audio")
+	audio, err := base64.StdEncoding.DecodeString(audioStr)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to decode the audio"})
+		return
 	}
 
-	file, err := os.OpenFile("audio.mp3", os.O_CREATE|os.O_WRONLY, 0777)
+	file, err := os.OpenFile("audio.m4a", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to create an audio file"})
 		return
 	}
-	defer file.Close()
 
 	_, err = file.Write(audio)
 	if err != nil {
+		file.Close()
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to write the file"})
 		return
 	}
+
+	file.Close()
+
+	file, err = os.Open("audio.m4a")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to opne the file"})
+		return
+	}
+	defer file.Close()
 
 	client := openai.NewClient(os.Getenv("GPT_API_KEY"))
 
 	resp, err := client.CreateTranscription(
 		context.Background(),
 		openai.AudioRequest{
-			Model:    openai.Whisper1,
-			FilePath: "audio.mp3",
+			Model:    "gpt-4o-mini-transcribe",
+			FilePath: "audio.m4a",
 		},
 	)
 	if err != nil {
@@ -90,7 +102,7 @@ func GetVoiceResponse(c *gin.Context) {
 		openai.ChatCompletionRequest{
 			Model: openai.GPT4oMini,
 			Messages: []openai.ChatCompletionMessage{{
-				Role:    openai.ChatMessageRoleAssistant,
+				Role:    openai.ChatMessageRoleSystem,
 				Content: prompt,
 			}},
 		},
